@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+
+	<head>
+		<meta charset="utf-8">
+
+		<title>reveal.js – The HTML Presentation Framework</title>
+
+		<meta name="description" content="A framework for easily creating beautiful presentations using HTML">
+		<meta name="author" content="Hakim El Hattab">
+
+		<meta name="apple-mobile-web-app-capable" content="yes">
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
+
+		<link rel="stylesheet" href="css/reveal.css">
+		<link rel="stylesheet" href="css/theme/black.css" id="theme">
+
+		<!-- Code syntax highlighting -->
+		<link rel="stylesheet" href="lib/css/zenburn.css">
+
+		<!-- Printing and PDF exports -->
+		<script>
+			var link = document.createElement( 'link' );
+			link.rel = 'stylesheet';
+			link.type = 'text/css';
+			link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+			document.getElementsByTagName( 'head' )[0].appendChild( link );
+		</script>
+
+		<!--[if lt IE 9]>
+		<script src="lib/js/html5shiv.js"></script>
+		<![endif]-->
+	</head>
+
+	<body>
+
+		<div class="reveal">
+
+			<!-- Any section element inside of this container is displayed as a slide -->
+			<div class="slides">
+				<section>
+					<h1>Celery gotchas</h1>
+					<h3>Co powinieneś wiedzieć o celerym zanim zaczniesz go obwiniać o wszystko co złe</h3>
+					<p>
+						<small><a href="http://twozniak.pl">Tomasz Woźniak</a> / <a href="">tomasz.wozniak@stxnext.pl</a></small>
+					</p>
+				</section>
+
+				<section>
+					<h2>Wykonywanie zadań lokalnie - synchroniczne</h2>
+					<pre><code class="hljs" data-trim contenteditable>
+CELERY_ALWAYS_EAGER = True
+					</code></pre>
+					<p>Wiadomość nie zostanie dostarczona do brokera.</p>
+				</section>
+                <section>
+					<h2>"Taski mi się nie wykonują", "Celery mi nie działa"</h2>
+                    <p>Twój worker konsumuje taski które zostały wysłane do bazy zadań. Jeżeli coś nie działa to:</p>
+                    <li>Nie ma zadań w kolejce</li>
+                    <li>Worker sprawdza złą kolejkę</li>
+                    <li>Task się wywalił ale nie masz o tym pojęcia</li>
+					<img src="img/ZUUNxz6.gif">
+				</section>
+                <section>
+					<h2>Race condition</h2>
+                    <img src="img/RWgYIC3.gif">
+                    <p>Twoje zadania domyślnie wykonają się w 4 wątkach.</p>
+                    <pre><code class="hljs" data-trim contenteditable>
+celery worker -c 4 # default
+					</code></pre>
+				</section>
+                <section>
+					<h2>Używaj kolejek</h2>
+                    - Nie ma powodu aby jedno zadanie czekało na drugie skoro wykonuje zupełnie inną rzecz.
+				</section>
+
+                <section>
+					<h2>Nie używaj bazy danych jako Brokera</h2>
+                    <p>Push z AMQP jest znacznie wydajniejszy niż pull z workera</p>
+                    <p>SELECT FOR UPDATE tworzy locki = niska wydajność</p>
+                    <p>Przykład: 4 kolejki * 4 procesy = 16 uderzeń do bazy na sekundę</p>
+				</section>
+
+                <section>
+					<h2>Load balancing - celery beat</h2>
+                    <p>Powinien być tylko jeden proces beat!</p>
+                    <p>Jeżeli chcemy tylko wysyłać eventy:</p>
+                    <pre><code class="hljs" data-trim contenteditable>
+celery beat
+					</code></pre>
+                    <p>Jeżeli chcemy wysyłać i konsumować:</p>
+                    <pre><code class="hljs" data-trim contenteditable>
+celery worker -B
+					</code></pre>
+				</section>
+
+                <section>
+					<h2>Nie przekazuj obiektów jako argumentów taska</h2>
+                    <li>Kwestie bezpieczeństwa (serializacja do Pickle w RabbitMQ)</li>
+                    <li>Race condition</li>
+                    <p>W przypadku Django ORM zawsze przekazuj primary key i pobieraj obiekt z bazy</p>
+				</section>
+
+                <section>
+					<h2>Monitoring</h2>
+                    <li>Flower</li>
+                    <li>rabbitmqctl</li>
+                    <li>celery events</li>
+                    <li>Sentry/Newrelick</li>
+				</section>
+
+                <section>
+					<h2>Flower - lista workerów</h2>
+                    <img src="img/flower.png">
+				</section>
+
+                <section>
+					<h2>Flower - lista zadań</h2>
+                    <img src="img/flower1.png">
+				</section>
+
+                <section>
+					<h2>Flower - detale zadania</h2>
+                    <img src="img/flower2.png">
+				</section>
+
+                <section>
+					<h2>Flower - wykresy</h2>
+                    <img src="img/flower3.png">
+				</section>
+
+                <section>
+					<h2>Events</h2>
+                    <pre><code class="hljs" data-trim contenteditable>
+celery events
+					</code></pre>
+<img src="">
+				</section>
+                <section>
+					<h2>Sprawdzanie wiadomości w Rabbitmq</h2>
+                    <pre><code class="hljs" data-trim contenteditable>
+wozmin@wozmin-Ubuntu:~ $ sudo rabbitmqctl list_queues
+[sudo] password for wozmin:
+Listing queues ...
+celery	0
+...done
+					</code></pre>
+				</section>
+                <section>
+					<h2>Workery rezerwują wiadomości w rabbitmq</h2>
+                    <pre><code class="hljs" data-trim contenteditable>
+wozmin@wozmin-Ubuntu:~ $ sudo rabbitmqctl messages list_queues messages_unacknowledged
+[sudo] password for wozmin:
+Listing queues ...
+celery	0 0
+...done
+					</code></pre>
+				</section>
+
+				<section style="text-align: left;">
+					<h1>THE END</h1>
+					<p>
+						- <a href="http://docs.celeryproject.org/en/latest/">http://docs.celeryproject.org/en/latest/</a> <br>
+						- <a href="https://github.com/mher/flower">https://github.com/mher/flower</a><br>
+						- <a href="https://wiredcraft.com/blog/3-gotchas-for-celery/">https://wiredcraft.com/blog/3-gotchas-for-celery/</a><br>
+						- <a href="https://denibertovic.com/posts/celery-best-practices//">https://denibertovic.com/posts/celery-best-practices/</a>
+					</p>
+				</section>
+
+			</div>
+
+		</div>
+
+		<script src="lib/js/head.min.js"></script>
+		<script src="js/reveal.js"></script>
+
+		<script>
+
+			// Full list of configuration options available at:
+			// https://github.com/hakimel/reveal.js#configuration
+			Reveal.initialize({
+				controls: true,
+				progress: true,
+				history: true,
+				center: true,
+
+				transition: 'slide', // none/fade/slide/convex/concave/zoom
+
+				// Optional reveal.js plugins
+				dependencies: [
+					{ src: 'lib/js/classList.js', condition: function() { return !document.body.classList; } },
+					{ src: 'plugin/markdown/marked.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+					{ src: 'plugin/markdown/markdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+					{ src: 'plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } },
+					{ src: 'plugin/zoom-js/zoom.js', async: true },
+					{ src: 'plugin/notes/notes.js', async: true }
+				]
+			});
+
+		</script>
+
+	</body>
+</html>
